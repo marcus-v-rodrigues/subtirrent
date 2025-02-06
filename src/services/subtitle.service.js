@@ -18,11 +18,12 @@ export const SubtitleService = {
       ]);
   },
 
-  getLanguageInfo: (code) => {
-    return {
-      code: iso6391.validate(code) ? code : 'und',
-      name: iso6391.getName(code) || 'Unknown'
-    };
+  validateLanguageCode: (code) => {
+    return iso6391.validate(code) ? code : 'und';
+  },
+
+  getLanguageName: (code) => {
+    return iso6391.getName(code) || 'Unknown';
   },
 
   cacheSubtitle: (subId, data) => {
