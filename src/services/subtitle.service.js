@@ -1,6 +1,6 @@
 import ffmpeg from 'fluent-ffmpeg';
 import iso6391 from 'iso-639-1';
-import { subtitleCache, CACHE_CONFIG } from './config.js';
+import { subtitleCache, CACHE_CONFIG } from '../config.js';
 
 export const SubtitleService = {
   probeSubtitles: async (videoUrl) => new Promise((resolve, reject) => {
