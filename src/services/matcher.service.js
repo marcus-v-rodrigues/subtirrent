@@ -1,160 +1,196 @@
 import fetch from 'node-fetch';
 import { LRUCache } from 'lru-cache';
 
-// Cache para armazenar resultados de buscas recentes
-// Limite de 100 entradas para evitar consumo excessivo de memória
-// TTL de 30 minutos pois os links do AllDebrid podem expirar
+/**
+ * Cache para armazenar resultados de buscas recentes
+ * Configurado com um TTL menor pois estamos trabalhando com arquivos específicos
+ * e queremos garantir que as informações estejam sempre atualizadas
+ */
 const cache = new LRUCache({
-    max: 100,
-    ttl: 1000 * 60 * 30 // 30 minutos
+    max: 100,                // Máximo de 100 entradas no cache
+    ttl: 1000 * 60 * 15     // 15 minutos de TTL
 });
 
 export const MatcherService = {
-    // Remove elementos não essenciais do nome do torrent para facilitar comparação
-    // Por exemplo: qualidade do vídeo, codecs, tags de release
-    cleanName: (name) => {
-        return name
-            .replace(/\[[^\]]*\]|\([^\)]*\)/g, '') // Remove conteúdo entre [] e ()
-            .replace(/\b(480p|720p|1080p|2160p|BRRip|WEBRip|BluRay|x264|x265|HEVC|AAC|AC3|HDR)\b.*$/i, '') // Remove tags técnicas
-            .replace(/\./g, ' ') // Substitui pontos por espaços
-            .replace(/\s+/g, ' ') // Normaliza espaços múltiplos
-            .trim()
-            .toLowerCase();
-    },
-
-    // Compara dois nomes de torrent para verificar se são o mesmo conteúdo
-    // Considera variações comuns em nomes de release e verifica o ano se presente
-    compareNames: (name1, name2) => {
-        const clean1 = MatcherService.cleanName(name1);
-        const clean2 = MatcherService.cleanName(name2);
-        
-        // Extrai o ano se presente no nome (formato 19XX ou 20XX)
-        const year1 = clean1.match(/\b(19|20)\d{2}\b/)?.[0];
-        const year2 = clean2.match(/\b(19|20)\d{2}\b/)?.[0];
-
-        // Se ambos têm anos diferentes, não pode ser o mesmo conteúdo
-        if (year1 && year2 && year1 !== year2) {
-            return false;
-        }
-
-        // Remove os anos para comparar apenas os títulos
-        const title1 = clean1.replace(/\b(19|20)\d{2}\b/, '').trim();
-        const title2 = clean2.replace(/\b(19|20)\d{2}\b/, '').trim();
-
-        // Um título deve estar contido no outro para ser considerado match
-        return title1.includes(title2) || title2.includes(title1);
-    },
-
-    // Identifica o arquivo de vídeo principal em um torrent com múltiplos arquivos
-    // Útil para torrents de séries ou com extras/bônus
-    findMainVideoFile: (files) => {
-        // Filtra apenas arquivos com extensões de vídeo conhecidas
-        const videoFiles = files.filter(file => 
-            /\.(mkv|mp4|avi|mov|wmv)$/i.test(file.filename)
-        );
-
-        if (!videoFiles.length) return null;
-
-        // Assume que o maior arquivo é o vídeo principal
-        // Isso funciona bem para filtrar extras/samples
-        return videoFiles.reduce((largest, current) => 
-            current.size > largest.size ? current : largest
-        );
-    },
-
-    // Busca a lista de downloads ativos no AllDebrid
-    // Necessário para depois procurar o arquivo específico
+    /**
+     * Busca a lista de downloads ativos no AllDebrid
+     * @param {string} apiKey - Chave da API do AllDebrid
+     * @returns {Promise<Array>} Lista de downloads ativos
+     */
     fetchDownloads: async (apiKey) => {
-        const response = await fetch(
-            `https://api.alldebrid.com/v4/magnet/status?agent=subtirrent&apikey=${apiKey}`
-        );
-
-        if (!response.ok) {
-            throw new Error(`AllDebrid API error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        return data.status === 'success' ? data.data.magnets : [];
-    },
-
-    // Obtém o link de streaming direto para um arquivo específico
-    // AllDebrid fornece um link HTTP que pode ser usado com FFmpeg
-    getStreamUrl: async (link, apiKey) => {
-        const response = await fetch(
-            `https://api.alldebrid.com/v4/link/unlock?agent=subtirrent&apikey=${apiKey}&link=${link}`
-        );
-
-        const data = await response.json();
-        return data.status === 'success' ? data.data.link : null;
-    },
-
-    // Procura nos downloads ativos por um arquivo que corresponda ao nome procurado
-    // Considera tanto o nome do torrent quanto os nomes dos arquivos individuais
-    findMatch: (downloads, targetName) => {
-        for (const download of downloads) {
-            // Ignora downloads que ainda não estão prontos
-            if (download.status !== 'Ready') continue;
-
-            // Primeiro tenta corresponder pelo nome do torrent completo
-            if (MatcherService.compareNames(download.filename, targetName)) {
-                // Se só tem um arquivo, é esse que queremos
-                if (download.files.length === 1) {
-                    return download.files[0];
-                }
-                
-                // Se tem múltiplos arquivos, procura o vídeo principal
-                return MatcherService.findMainVideoFile(download.files);
-            }
-
-            // Se não achou pelo nome do torrent, procura arquivo por arquivo
-            const matchingFile = download.files.find(file => 
-                MatcherService.compareNames(file.filename, targetName)
+        try {
+            // Faz a requisição para a API do AllDebrid
+            const response = await fetch(
+                `https://api.alldebrid.com/v4/magnet/status?agent=subtirrent&apikey=${apiKey}`
             );
 
-            if (matchingFile) return matchingFile;
+            if (!response.ok) {
+                throw new Error(`Erro na API do AllDebrid: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            
+            // Valida a resposta da API
+            if (data.status !== 'success') {
+                throw new Error(`Resposta inválida da API: ${data.error || 'Erro desconhecido'}`);
+            }
+
+            // Retorna a lista de downloads ou array vazio se não houver dados
+            return data.data.magnets || [];
+
+        } catch (error) {
+            console.error('Falha ao buscar downloads:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Encontra um arquivo específico nos downloads baseado no tamanho
+     * Usa o tamanho do arquivo como principal critério de busca para
+     * garantir que encontremos exatamente o arquivo sendo reproduzido
+     * 
+     * @param {Array} downloads - Lista de downloads do AllDebrid
+     * @param {string} filename - Nome do arquivo para referência
+     * @param {number} fileSize - Tamanho do arquivo em bytes
+     * @returns {Object|null} Arquivo encontrado ou null
+     */
+    findExactFile: (downloads, filename, fileSize) => {
+        // Validação dos parâmetros de entrada
+        if (!downloads || !Array.isArray(downloads)) {
+            console.warn('Lista de downloads inválida');
+            return null;
         }
 
+        if (!fileSize || fileSize <= 0) {
+            console.warn('Tamanho de arquivo inválido:', fileSize);
+            return null;
+        }
+
+        // Define uma margem de erro de 1% para comparação de tamanhos
+        // Isso é necessário pois diferentes sistemas podem reportar
+        // tamanhos levemente diferentes para o mesmo arquivo
+        const sizeMargin = fileSize * 0.01;
+        
+        // Procura em todos os downloads
+        for (const download of downloads) {
+            // Pula downloads que não estão prontos ou não têm links
+            if (download.status !== 'Ready' || !download.links) {
+                continue;
+            }
+
+            // Procura em todos os links do download
+            for (const link of download.links) {
+                // Verifica se o tamanho do arquivo corresponde (com margem de erro)
+                const sizeDiff = Math.abs(link.size - fileSize);
+                
+                if (sizeDiff <= sizeMargin) {
+                    // Encontrou o arquivo correto
+                    console.log('Arquivo encontrado:', {
+                        filename: link.filename,
+                        size: link.size,
+                        expectedSize: fileSize,
+                        difference: sizeDiff
+                    });
+                    return link;
+                }
+            }
+        }
+
+        // Arquivo não encontrado
+        console.warn('Arquivo não encontrado com o tamanho especificado:', {
+            filename,
+            size: fileSize
+        });
         return null;
     },
 
-    // Função principal que coordena todo o processo de busca
-    // Usa cache para evitar requisições repetidas à API
-    findMedia: async (filename, apiKey) => {
-        // Verifica primeiro no cache
-        const cached = cache.get(filename);
-        if (cached) return cached.streamUrl;
-
+    /**
+     * Obtém o link de streaming direto para um arquivo
+     * @param {string} link - Link do arquivo no AllDebrid
+     * @param {string} apiKey - Chave da API do AllDebrid
+     * @returns {Promise<string|null>} URL de streaming ou null
+     */
+    getStreamUrl: async (link, apiKey) => {
         try {
-            const downloads = await MatcherService.fetchDownloads(apiKey);
-            const match = MatcherService.findMatch(downloads, filename);
+            const response = await fetch(
+                `https://api.alldebrid.com/v4/link/unlock?agent=subtirrent&apikey=${apiKey}&link=${link}`
+            );
+
+            const data = await response.json();
             
-            if (!match) {
-                throw new Error(`File not found: ${filename}`);
+            if (data.status !== 'success') {
+                throw new Error(`Falha ao desbloquear link: ${data.error || 'Erro desconhecido'}`);
             }
 
+            return data.data.link || null;
+
+        } catch (error) {
+            console.error('Falha ao obter URL de streaming:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Função principal que coordena a busca do arquivo específico
+     * @param {string} filename - Nome do arquivo
+     * @param {string} apiKey - Chave da API do AllDebrid
+     * @param {number} fileSize - Tamanho do arquivo em bytes
+     * @returns {Promise<string>} URL de streaming do arquivo
+     */
+    findMedia: async (filename, apiKey, fileSize) => {
+        try {
+            // Validação dos parâmetros
+            if (!filename || !apiKey || !fileSize) {
+                throw new Error('Parâmetros inválidos para busca de mídia');
+            }
+
+            // Cria uma chave única para o cache que inclui o tamanho
+            const cacheKey = `${filename}-${fileSize}`;
+            
+            // Verifica primeiro no cache
+            const cached = cache.get(cacheKey);
+            if (cached) {
+                console.log('Usando resultado em cache para:', filename);
+                return cached.streamUrl;
+            }
+
+            // Busca downloads ativos no AllDebrid
+            const downloads = await MatcherService.fetchDownloads(apiKey);
+            
+            // Encontra o arquivo específico usando o tamanho como referência
+            const match = MatcherService.findExactFile(downloads, filename, fileSize);
+            
+            if (!match) {
+                throw new Error(`Arquivo não encontrado: ${filename} (${fileSize} bytes)`);
+            }
+
+            // Obtém URL de streaming
             const streamUrl = await MatcherService.getStreamUrl(match.link, apiKey);
             
             if (!streamUrl) {
-                throw new Error('Failed to get streaming URL');
+                throw new Error('Falha ao obter URL de streaming');
             }
 
             // Armazena no cache para futuras requisições
-            cache.set(filename, {
+            cache.set(cacheKey, {
                 streamUrl,
                 filename: match.filename,
+                size: match.size,
                 timestamp: Date.now()
             });
 
             return streamUrl;
 
         } catch (error) {
-            console.error('Media lookup failed:', error);
+            console.error('Falha na busca de mídia:', error);
             throw error;
         }
     },
 
-    // Limpa o cache manualmente se necessário
-    // Útil em desenvolvimento ou para forçar novas buscas
+    /**
+     * Limpa o cache manualmente
+     * Útil para desenvolvimento ou para forçar novas buscas
+     */
     clearCache: () => {
         cache.clear();
     }

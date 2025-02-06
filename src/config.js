@@ -14,19 +14,22 @@ export const SERVER_CONFIG = {
     baseUrl: process.env.BASE_URL || 'http://localhost:7000'
 };
 
-// Manifest do addon para o Stremio
 export const MANIFEST = {
     id: 'org.subtirrent',
     version: '1.0.0',
     name: 'Subtirrent',
     description: 'Extrai legendas embutidas de torrents usando AllDebrid',
+    // Garante que subtitles está nos recursos
     resources: ['subtitles'],
     types: ['movie', 'series'],
-    idPrefixes: ['tt'],
-    catalogs: [] 
+    // Remove idPrefixes para aceitar qualquer ID
+    catalogs: [],
+    // Configuração simplificada
+    behaviorHints: {
+        p2p: false
+    }
 };
 
-// Configurações da aplicação
 export const CONFIG = {
     alldebrid: {
         apiKey: process.env.ALLDEBRID_API_KEY,

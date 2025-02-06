@@ -2,79 +2,94 @@ import { MatcherService } from '../services/matcher.service.js';
 import { SubtitleService } from '../services/subtitle.service.js';
 
 export const SubtitleHandler = {
-  // Processa uma requisição de legendas vinda do Stremio
-  // Recebe os parâmetros padrão do Stremio mais a chave da API do AllDebrid
-  processRequest: async ({ type, id, extra }, apiKey) => {
-      try {
-          const { filename } = extra;
-          
-          // Validação inicial dos parâmetros necessários
-          if (!filename || !apiKey) {
-              console.error('Missing required parameters:', { filename, apiKey });
-              return { subtitles: [] };
-          }
+    /**
+     * Processa uma requisição de legendas
+     * @param {Object} params - Parâmetros da requisição
+     * @param {string} params.filename - Nome do arquivo ou ID do conteúdo
+     * @param {string} params.apiKey - Chave da API do AllDebrid
+     * @param {Object} params.extra - Dados adicionais do vídeo
+     * @returns {Promise<Object>} - Lista de legendas disponíveis
+     */
+    processRequest: async ({ filename, apiKey, extra }) => {
+        try {
+            // Log inicial para debug
+            console.log('Recebida requisição de legendas:', {
+                filename,
+                hasExtra: !!extra,
+                extraKeys: extra ? Object.keys(extra) : []
+            });
 
-          // Localiza o arquivo no AllDebrid e obtém URL de streaming
-          const streamUrl = await MatcherService.findMedia(filename, apiKey);
-          
-          // Analisa o arquivo em busca de faixas de legenda
-          // O FFmpeg vai identificar todas as legendas embutidas
-          const tracks = await SubtitleService.probeSubtitles(streamUrl);
-          
-          // Processa cada faixa de legenda encontrada
-          const subtitles = tracks
-              // Filtra apenas faixas do tipo legenda
-              .filter(track => track.codec_type === 'subtitle')
-              .map((track, index) => {
-                  // Extrai o código do idioma ou usa 'und' (indefinido)
-                  const lang = track.tags?.language || 'und';
-                  
-                  // Cria ID único para esta legenda
-                  // Formato: "idDoVideo:índiceDaFaixa"
-                  const subId = `${id}:${index}`;
+            // Extrai o tamanho do arquivo e limpa o filename
+            const fileSize = parseInt(extra?.videoSize);
+            const cleanFilename = filename.split('/').pop().split('?')[0];
 
-                  // Armazena dados da legenda para extração posterior
-                  // Isso evita ter que procurar o arquivo novamente
-                  SubtitleService.cacheSubtitle(subId, {
-                      streamUrl,
-                      trackIndex: index,
-                      language: lang
-                  });
+            // Se temos filename no extra, vamos usá-lo
+            const targetFilename = extra?.filename || cleanFilename;
 
-                  // Retorna no formato que o Stremio espera
-                  return {
-                      id: subId,
-                      url: `${process.env.BASE_URL}/subtitles/${subId}`,
-                      lang: SubtitleService.validateLanguageCode(lang),
-                      name: SubtitleService.getLanguageName(lang)
-                  };
-              });
+            // Validação dos parâmetros com log detalhado
+            if (!targetFilename || !apiKey || !fileSize) {
+                console.log('Parâmetros da requisição:', {
+                    targetFilename,
+                    hasApiKey: !!apiKey,
+                    fileSize,
+                    originalFilename: filename,
+                    extraFilename: extra?.filename
+                });
+                return { subtitles: [] };
+            }
 
-          return { subtitles };
+            // Busca o arquivo específico
+            const streamUrl = await MatcherService.findMedia(targetFilename, apiKey, fileSize);
+            
+            if (!streamUrl) {
+                throw new Error('URL de streaming não encontrada');
+            }
 
-      } catch (error) {
-          console.error('Subtitle processing failed:', error);
-          // Retorna lista vazia em caso de erro
-          // Isso evita que o Stremio pare de funcionar
-          return { subtitles: [] };
-      }
-  },
+            // Resto do código permanece o mesmo...
+            const tracks = await SubtitleService.probeSubtitles(streamUrl);
+            
+            if (!tracks || !Array.isArray(tracks)) {
+                throw new Error('Nenhuma faixa de legenda encontrada');
+            }
 
-  // Extrai uma legenda específica usando seu ID
-  // Usado quando o Stremio solicita o conteúdo de uma legenda
-  extractSubtitle: async (subId) => {
-      // Recupera informações da legenda do cache
-      const cached = SubtitleService.getCachedSubtitle(subId);
-      
-      if (!cached) {
-          throw new Error('Subtitle information not found in cache');
-      }
+            const subtitles = tracks
+                .filter(track => track.codec_type === 'subtitle')
+                .map((track, index) => {
+                    const lang = track.tags?.language || 'und';
+                    const subId = `${targetFilename}:${index}`;
 
-      // Converte a legenda para formato VTT
-      // O Stremio requer legendas em WebVTT
-      return SubtitleService.convertToVTT(
-          cached.streamUrl,
-          cached.trackIndex
-      );
-  }
+                    SubtitleService.cacheSubtitle(subId, {
+                        streamUrl,
+                        trackIndex: index,
+                        language: lang
+                    });
+
+                    return {
+                        id: subId,
+                        url: `${process.env.BASE_URL}/subtitles/${subId}`,
+                        lang: SubtitleService.validateLanguageCode(lang),
+                        name: SubtitleService.getLanguageName(lang)
+                    };
+                });
+
+            return { subtitles };
+
+        } catch (error) {
+            console.error('Falha no processamento da legenda:', error);
+            return { subtitles: [] };
+        }
+    },
+
+    extractSubtitle: async (subId) => {
+        const cached = SubtitleService.getCachedSubtitle(subId);
+        
+        if (!cached) {
+            throw new Error('Informações da legenda não encontradas no cache');
+        }
+
+        return SubtitleService.convertToVTT(
+            cached.streamUrl,
+            cached.trackIndex
+        );
+    }
 };
