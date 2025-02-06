@@ -9,6 +9,9 @@ router.get('/subtitles/:id', async (req, res) => {
         // Configura os headers para streaming de WebVTT
         res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Headers', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
         
         // Extrai a legenda e faz streaming direto para o cliente
         const stream = await SubtitleHandler.extractSubtitle(req.params.id);
