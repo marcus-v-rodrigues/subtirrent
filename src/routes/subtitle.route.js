@@ -29,9 +29,9 @@ router.get('/subtitles/:id', async (req, res) => {
         const stream = await SubtitleHandler.extractSubtitle(req.params.id);
         console.log('✅ Stream de legenda iniciado com sucesso');
         
-        // Configura headers básicos para compatibilidade máxima
+        // Configura os headers com o Content-Type apropriado
         res.set({
-            'Content-Type': 'text/vtt',
+            'Content-Type': SubtitleService.getContentType(),
             'Access-Control-Allow-Origin': '*',
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive'

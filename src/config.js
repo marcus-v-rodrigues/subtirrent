@@ -30,12 +30,14 @@ export const MANIFEST = {
     }
 };
 
+// Configuração que pode ser alterada via interface
 export const CONFIG = {
     alldebrid: {
-        apiKey: process.env.ALLDEBRID_API_KEY,
+        apiKey: null,
         enabled: true
     },
     subtitle: {
+        format: 'vtt', // Pode ser 'vtt' ou 'srt'
         preferredLanguages: ['eng', 'por'],
         convertToUtf8: true,
         cacheTimeout: 1800

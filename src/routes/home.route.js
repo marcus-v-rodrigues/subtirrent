@@ -3,17 +3,33 @@ import { CONFIG } from '../config.js';
 
 const router = express.Router();
 
+// Rota para salvar configurações
+router.post('/config', (req, res) => {
+    try {
+        // Atualiza as configurações em memória
+        CONFIG.alldebrid.apiKey = req.body.apiKey;
+        CONFIG.subtitle.format = req.body.format;
+        
+        console.log('✅ Configurações atualizadas:', {
+            hasApiKey: !!CONFIG.alldebrid.apiKey,
+            format: CONFIG.subtitle.format
+        });
+        
+        res.redirect('/');
+    } catch (error) {
+        console.error('❌ Erro ao salvar configurações:', error);
+        res.status(500).send('Erro ao salvar configurações');
+    }
+});
+
 // Rota principal que exibe a página de instalação do addon
 router.get('/', (req, res) => {
-    // Detecta o protocolo usado
     const protocol = req.secure ? 'https' : 'http';
     const host = req.headers['x-forwarded-host'] || req.get('host');
     
-    // Constrói as URLs de instalação
     const manifestUrl = `${protocol}://${host}/manifest.json`;
     const installUrl = `stremio://${host}/manifest.json`;
 
-    // Retorna a página HTML com as instruções de instalação
     const html = `
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -55,22 +71,90 @@ router.get('/', (req, res) => {
                 border-radius: 5px; 
                 margin: 15px 0;
             }
+            .config-form {
+                margin: 2rem 0;
+                text-align: left;
+            }
+            .form-group {
+                margin-bottom: 1rem;
+            }
+            label {
+                display: block;
+                margin-bottom: 0.5rem;
+                font-weight: bold;
+            }
+            input[type="text"],
+            select {
+                width: 100%;
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                margin-bottom: 0.5rem;
+            }
+            .save-button {
+                background: #10b981;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .save-button:hover {
+                background: #059669;
+            }
+            .status {
+                margin-top: 2rem;
+                padding: 1rem;
+                background: #f8fafc;
+                border-radius: 5px;
+            }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>Instalação do Addon Subtirrent</h1>
+            
+            <div class="config-form">
+                <h2>Configurações</h2>
+                <form action="/config" method="POST">
+                    <div class="form-group">
+                        <label for="apiKey">Chave da API AllDebrid:</label>
+                        <input 
+                            type="text" 
+                            id="apiKey" 
+                            name="apiKey" 
+                            value="${CONFIG.alldebrid.apiKey || ''}"
+                            placeholder="Cole sua chave aqui"
+                            required
+                        >
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="format">Formato das Legendas:</label>
+                        <select id="format" name="format">
+                            <option value="vtt" ${CONFIG.subtitle.format === 'vtt' ? 'selected' : ''}>
+                                WebVTT (Melhor compatibilidade web)
+                            </option>
+                            <option value="srt" ${CONFIG.subtitle.format === 'srt' ? 'selected' : ''}>
+                                SRT (Melhor compatibilidade TV)
+                            </option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="save-button">Salvar Configurações</button>
+                </form>
+            </div>
+
             <p>Clique no botão abaixo para instalar o Subtirrent no Stremio:</p>
             <a href="${installUrl}" class="install-link">Instalar Addon</a>
+            
             <p>Ou copie e cole esta URL no Stremio:</p>
             <div class="manifest-url">${manifestUrl}</div>
-            <p>
-                Este addon extrai legendas embutidas de torrents que você está assistindo usando 
-                sua conta do AllDebrid.
-            </p>
+            
             <div class="status">
                 <h2>Status</h2>
                 <p>AllDebrid: ${CONFIG.alldebrid.apiKey ? '✅ Configurado' : '❌ Não configurado'}</p>
+                <p>Formato: ${CONFIG.subtitle.format === 'vtt' ? 'WebVTT' : 'SRT'}</p>
             </div>
         </div>
     </body>

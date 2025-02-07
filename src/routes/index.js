@@ -8,6 +8,10 @@ import SubtitleRoute from './subtitle.route.js';
 
 const router = express.Router();
 
+// Middleware para processar o corpo das requisições POST
+router.use(express.urlencoded({ extended: true }));
+router.use(express.json());
+
 // Middleware para logging de requisições
 router.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);

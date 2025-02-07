@@ -87,19 +87,28 @@ export const SubtitleHandler = {
                         tags: track.tags
                     });
 
-                    // Armazena informações da legenda em cache para uso posterior
-                    SubtitleService.cacheSubtitle(subId, {
+                    return {
+                        lang,
+                        subId,
+                        codec: track.codec_name,
+                        index
+                    };
+                })
+                // Filtra legendas com idioma indefinido
+                .filter(track => track.lang !== 'und')
+                // Gera o formato final para o Stremio
+                .map(track => {
+                    SubtitleService.cacheSubtitle(track.subId, {
                         streamUrl,
-                        trackIndex: index,
-                        language: lang
+                        trackIndex: track.index,
+                        language: track.lang
                     });
 
-                    // Retorna objeto no formato esperado pelo Stremio
                     return {
-                        id: subId,
-                        url: `${process.env.BASE_URL}/subtitles/${subId}`,
-                        lang: SubtitleService.validateLanguageCode(lang),
-                        name: SubtitleService.getLanguageName(lang)
+                        id: track.subId,
+                        url: `${process.env.BASE_URL}/subtitles/${track.subId}`,
+                        lang: SubtitleService.validateLanguageCode(track.lang),
+                        name: SubtitleService.getLanguageName(track.lang)
                     };
                 });
 
