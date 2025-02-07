@@ -8,9 +8,10 @@ import SubtitleRoute from './subtitle.route.js';
 
 const router = express.Router();
 
-// Middleware para processar o corpo das requisições POST
-router.use(express.urlencoded({ extended: true }));
-router.use(express.json());
+// Middleware para servir conteúdo estático e processar requisições
+router.use(express.static('public')); // Para arquivos estáticos se necessário
+router.use(express.urlencoded({ extended: true })); // Para dados de formulário
+router.use(express.json()); // Para requisições JSON
 
 // Middleware para logging de requisições
 router.use((req, res, next) => {
@@ -24,7 +25,6 @@ router.use((req, res, next) => {
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.header('Access-Control-Allow-Headers', '*');
     res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Content-Type', 'text/vtt; charset=utf-8');
     
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
@@ -33,7 +33,16 @@ router.use((req, res, next) => {
     next();
 });
 
-// Rotas do Stremio (manifest.json e endpoints do addon)
+// Configuração de tipos de conteúdo específicos
+router.use((req, res, next) => {
+    // Se a rota é a página inicial, garante que será interpretada como HTML
+    if (req.path === '/') {
+        res.type('html');
+    }
+    next();
+});
+
+// Rotas do Stremio
 router.use(getRouter(addonInterface));
 
 // Nossas rotas customizadas
