@@ -21,35 +21,40 @@ export const SubtitleService = {
    * @returns {ffmpeg.FfmpegCommand} Stream de conversão do FFmpeg
    */
   convertSubtitle: (input, trackIndex) => {
-    // Determina o formato baseado na configuração
-    const format = CONFIG.subtitle.format || 'vtt';
+    const format = CONFIG.subtitle.format || 'srt';
     
-    console.log('🔄 Convertendo legenda:', {
-      input: input,
-      trackIndex: trackIndex,
-      formatoSaida: format
-    });
-
-    // Configura a conversão baseado no formato escolhido
     const outputOptions = [
-      `-map 0:${trackIndex}`,
-      format === 'vtt' 
-        ? ['-c:s webvtt', '-f webvtt'] 
-        : ['-c:s srt', '-f srt']
-    ].flat();
+        `-map 0:${trackIndex}`,
+        `-c:s ${format}`,
+        `-f ${format}`
+    ];
 
     return ffmpeg(input)
-      .outputOptions(outputOptions);
+        .outputOptions(outputOptions)
+        .on('start', (command) => {
+            console.log('🎬 Comando FFmpeg:', command);
+        });
   },
 
   /**
    * Retorna o Content-Type apropriado baseado no formato configurado
+   * Isso é importante para que o navegador interprete corretamente o arquivo
    * @returns {string} Content-Type para a resposta HTTP
    */
   getContentType: () => {
-    return CONFIG.subtitle.format === 'vtt'
-      ? 'text/vtt; charset=utf-8'
-      : 'application/x-subrip; charset=utf-8';
+    const format = CONFIG.subtitle.format || 'srt';
+    const types = {
+        'vtt': 'text/vtt',
+        'srt': 'application/x-subrip'
+    };
+    const contentType = types[format] || types['srt'];
+    
+    console.log('📝 Content-Type para legenda:', {
+        formato: format,
+        contentType: contentType
+    });
+    
+    return `${contentType}; charset=utf-8`;
   },
 
   validateLanguageCode: (code) => {

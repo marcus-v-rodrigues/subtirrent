@@ -1,5 +1,6 @@
 import { MatcherService } from '../services/matcher.service.js';
 import { SubtitleService } from '../services/subtitle.service.js';
+import { SERVER_CONFIG, CONFIG } from '../config.js';
 
 export const SubtitleHandler = {
     /**
@@ -71,44 +72,35 @@ export const SubtitleHandler = {
 
             // Processa cada faixa de legenda encontrada
             const subtitles = tracks
-                // Filtra apenas faixas do tipo subtitle
                 .filter(track => track.codec_type === 'subtitle')
-                // Mapeia cada faixa para o formato esperado pelo Stremio
                 .map((track, index) => {
-                    // Extrai o código de idioma ou usa 'und' (undefined) se não encontrar
                     const lang = track.tags?.language || 'und';
-                    // Cria ID único para esta legenda
+                    // Usa o targetFilename como base para o ID da legenda
                     const subId = `${targetFilename}:${index}`;
                     
-                    // Log detalhado de cada faixa
                     console.log(`📝 Processando legenda ${index}:`, {
                         lang,
                         codec: track.codec_name,
                         tags: track.tags
                     });
 
-                    return {
-                        lang,
-                        subId,
-                        codec: track.codec_name,
-                        index
-                    };
-                })
-                // Filtra legendas com idioma indefinido
-                .filter(track => track.lang !== 'und')
-                // Gera o formato final para o Stremio
-                .map(track => {
-                    SubtitleService.cacheSubtitle(track.subId, {
+                    // Cache primeiro, para garantir disponibilidade
+                    SubtitleService.cacheSubtitle(subId, {
                         streamUrl,
-                        trackIndex: track.index,
-                        language: track.lang
+                        trackIndex: track.index || index,
+                        language: lang,
+                        codec: track.codec_name
                     });
 
+                    // Gera URL completa com o host base correto
+                    const subtitleUrl = `${SERVER_CONFIG.baseUrl}/subtitles/${subId}`;
+                    console.log(`🔗 URL da legenda gerada: ${subtitleUrl}`);
+
                     return {
-                        id: track.subId,
-                        url: `${process.env.BASE_URL}/subtitles/${track.subId}`,
-                        lang: SubtitleService.validateLanguageCode(track.lang),
-                        name: SubtitleService.getLanguageName(track.lang)
+                        id: subId,
+                        url: subtitleUrl,
+                        lang: SubtitleService.validateLanguageCode(lang),
+                        name: `${SubtitleService.getLanguageName(lang)} - ${track.tags?.title || 'Track ' + index}`
                     };
                 });
 
@@ -126,11 +118,11 @@ export const SubtitleHandler = {
     },
 
     /**
-     * Extrai uma legenda específica e converte para formato VTT
+     * Extrai uma legenda específica e converte para o formato configurado
      * Esta função é chamada quando o Stremio solicita uma legenda específica
      * 
      * @param {string} subId - ID único da legenda (formato: filename:index)
-     * @returns {Promise<Stream>} - Stream da legenda em formato VTT
+     * @returns {Promise<Stream>} - Stream da legenda no formato configurado
      */
     extractSubtitle: async (subId) => {
         console.log('🎯 Extraindo legenda:', subId);
@@ -143,8 +135,11 @@ export const SubtitleHandler = {
         }
         console.log('✅ Legenda encontrada no cache:', cached);
 
-        // Converte a legenda para formato VTT e retorna o stream
-        return SubtitleService.convertToVTT(
+        // Registra o formato que será usado na conversão
+        console.log('📝 Formato de saída:', CONFIG.subtitle.format);
+
+        // Converte a legenda para o formato configurado e retorna o stream
+        return SubtitleService.convertSubtitle(
             cached.streamUrl,
             cached.trackIndex
         );
