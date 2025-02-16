@@ -4,7 +4,8 @@ import routes from './routes/index.js';
 
 const app = express();
 
-// Aplica as rotas ao aplicativo
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(routes);
 
 // Inicializa o servidor
