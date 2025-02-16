@@ -79,15 +79,16 @@ router.get('/configure', (req, res) => {
           border-radius: 4px;
           margin-bottom: 0.5rem;
       }
-      .save-button {
+      .save-button, .install-button {
           background: #10b981;
           color: white;
           border: none;
           padding: 10px 20px;
           border-radius: 4px;
           cursor: pointer;
+          margin-top: 10px;
       }
-      .save-button:hover {
+      .save-button:hover, .install-button:hover {
           background: #059669;
       }
       .status {
@@ -136,6 +137,9 @@ router.get('/configure', (req, res) => {
       <p>Ou copie e cole esta URL no Stremio:</p>
       <div class="manifest-url" id="manifestUrl"></div>
       
+      <!-- Botão para abrir o Stremio diretamente -->
+      <button id="installButton" class="install-button" style="display:none;">Instalar Addon no Stremio</button>
+      
       <div class="status">
           <h2>Status</h2>
           <p>AllDebrid: <span id="statusApiKey">❌ Não configurado</span></p>
@@ -147,6 +151,8 @@ router.get('/configure', (req, res) => {
       // Ao submeter o formulário, gera a string base64 com os dados e constrói o link de instalação
       const form = document.getElementById('configForm');
       const manifestUrlDiv = document.getElementById('manifestUrl');
+      const installButton = document.getElementById('installButton');
+
       form.addEventListener('submit', function(e) {
         e.preventDefault();
         // Captura os valores inseridos pelo usuário
@@ -172,10 +178,17 @@ router.get('/configure', (req, res) => {
         const encodedConfig = encodeURIComponent(configString);
         // Gera o link de instalação, colocando o token de configuração no caminho
         const installUrl = 'stremio://' + window.location.host + '/' + encodedConfig + '/manifest.json';
+        
         manifestUrlDiv.textContent = installUrl;
         // Atualiza o status visual
         document.getElementById('statusApiKey').textContent = apiKey ? '✅ Configurado' : '❌ Não configurado';
         document.getElementById('statusFormat').textContent = format === 'srt' ? 'SRT' : 'WebVTT';
+        
+        // Mostra o botão de instalação com o link configurado
+        installButton.style.display = 'inline-block';
+        installButton.onclick = function() {
+          window.location.href = installUrl;
+        };
       });
     </script>
   </body>

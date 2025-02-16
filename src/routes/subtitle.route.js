@@ -14,10 +14,21 @@ const router = express.Router();
  * Parâmetros extras (como videoHash, videoSize) podem ser passados via query string.
  */
 router.get('/:token/subtitles/:id(*)', async (req, res) => {
-    console.log("req: ", req);
     const { token } = req.params;
     // req.params.id conterá todo o restante da URL, incluindo as barras.
     const id = req.params.id.replace(/\.json$/, ''); // se necessário remover o .json no final
+
+    // Divide o id pelos '/'
+    const parts = id.split('/'); // ["series", "tt21209876:2:2", "videoHash=c3d9f7efdb214343&videoSize=1441633438"]
+
+    // Extrai o filename e remove o "tt"
+    const filePart = parts[1]; // "tt21209876:2:2"
+    const filename = filePart.replace(/^tt/, ''); // "21209876:2:2"
+
+    // Extrai os parâmetros da parte de query
+    const queryString = parts[2]; // "videoHash=c3d9f7efdb214343&videoSize=1441633438"
+    const params = new URLSearchParams(queryString);
+    const videoSize = parseInt(params.get('videoSize'), 10);
 
     let userConfig = {};
     try {
@@ -31,13 +42,18 @@ router.get('/:token/subtitles/:id(*)', async (req, res) => {
       console.warn('API key não configurada.');
       return res.json({ subtitles: [] });
     }
-    // Parâmetros extras (ex: videoHash, videoSize) e o token são repassados via query string
-    const extra = { ...req.query, token };
+    if (!userConfig.subtitle || !userConfig.subtitle.format) {
+      console.warn('Formato não configurada.');
+      return res.json({ subtitles: [] });
+    }
     try {
+
       const result = await SubtitleHandler.processRequest({
-        filename: id,
+        token,
+        filename,
+        videoSize,
         apiKey: userConfig.alldebrid.apiKey,
-        extra
+        format: userConfig.subtitle.format
       });
       res.json(result);
     } catch (err) {
@@ -64,12 +80,20 @@ router.get('/:token/subtitles/:id(*)', async (req, res) => {
       console.error('Erro ao decodificar token de configuração:', error);
       return res.status(400).json({ error: 'Token de configuração inválido' });
     }
+    if (!userConfig.alldebrid || !userConfig.alldebrid.apiKey) {
+      console.warn('API key não configurada.');
+      return res.json({ subtitles: [] });
+    }
+    if (!userConfig.subtitle || !userConfig.subtitle.format) {
+      console.warn('Formato não configurada.');
+      return res.json({ subtitles: [] });
+    }
     try {
       // extractSubtitle retorna um stream com o conteúdo da legenda convertido.
       const stream = await SubtitleHandler.extractSubtitle(id);
       // É importante configurar os headers corretamente para o formato de legenda.
       res.set({
-        'Content-Type': 'text/vtt', // ou 'application/x-subrip', conforme o formato
+        'Content-Type': SubtitleService.getContentType(userConfig.subtitle.format),
         'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'no-cache'
       });

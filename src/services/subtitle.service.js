@@ -1,6 +1,6 @@
 import ffmpeg from 'fluent-ffmpeg';
 import iso6391 from 'iso-639-1';
-import { subtitleCache, CACHE_CONFIG, CONFIG } from '../config.js';
+import { subtitleCache, CACHE_CONFIG } from '../config.js';
 
 export const SubtitleService = {
   /**
@@ -18,10 +18,10 @@ export const SubtitleService = {
    * Converte uma legenda para o formato configurado (VTT ou SRT)
    * @param {string} input - URL do vídeo de entrada
    * @param {number} trackIndex - Índice da faixa de legenda
+   * @param {string} format - Formato escolhido para a legenda
    * @returns {ffmpeg.FfmpegCommand} Stream de conversão do FFmpeg
    */
-  convertSubtitle: (input, trackIndex) => {
-    const format = CONFIG.subtitle.format || 'srt';
+  convertSubtitle: (input, trackIndex, format) => {
     
     const outputOptions = [
         `-map 0:${trackIndex}`,
@@ -39,10 +39,10 @@ export const SubtitleService = {
   /**
    * Retorna o Content-Type apropriado baseado no formato configurado
    * Isso é importante para que o navegador interprete corretamente o arquivo
+   * @param {string} format - Formato escolhido para a legenda
    * @returns {string} Content-Type para a resposta HTTP
    */
-  getContentType: () => {
-    const format = CONFIG.subtitle.format || 'srt';
+  getContentType: (format) => {
     const types = {
         'vtt': 'text/vtt',
         'srt': 'application/x-subrip'
@@ -50,7 +50,7 @@ export const SubtitleService = {
     const contentType = types[format] || types['srt'];
     
     console.log('📝 Content-Type para legenda:', {
-        formato: format,
+        format: format,
         contentType: contentType
     });
     
@@ -94,15 +94,15 @@ export const SubtitleService = {
     return iso6391.getName(cleanCode) || 'Unknown';
   },
 
-  cacheSubtitle: (subId, data) => {
+  cacheSubtitle: (subId, format, data) => {
     console.log('💾 Armazenando legenda no cache:', {
       id: subId,
-      formato: CONFIG.subtitle.format
+      format
     });
     subtitleCache.set(subId, { 
       ...data, 
       lastAccessed: Date.now(),
-      format: CONFIG.subtitle.format // Armazena o formato usado
+      format
     });
   },
   
@@ -112,7 +112,7 @@ export const SubtitleService = {
     if (cached) {
       console.log('✅ Legenda encontrada no cache:', {
         id: subId,
-        formato: cached.format
+        format: cached.format
       });
       subtitleCache.set(subId, { ...cached, lastAccessed: Date.now() });
     } else {

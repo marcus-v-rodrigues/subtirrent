@@ -8,38 +8,29 @@ export const SubtitleHandler = {
    * Esta função é chamada quando o Stremio solicita legendas para um vídeo
    *
    * @param {Object} params - Parâmetros da requisição
-   * @param {string} params.filename - Nome do arquivo ou ID do conteúdo (ex: tt1234567:1:1)
+   * @param {string} params.token - String (em base64) com os dados de configuração do usuário
+   * @param {string} params.filename - Nome do arquivo ou ID do conteúdo no OpenSubtitles (ex: 1234567:1:1)
+   * @param {Object} params.videoSize - Tamanho do vídeo
    * @param {string} params.apiKey - Chave da API do AllDebrid
-   * @param {Object} params.extra - Dados adicionais do vídeo (tamanho, hash, etc)
+   * @param {string} params.format - Formato escolhido para a legenda
    * @returns {Promise<Object>} - Lista de legendas disponíveis
    */
-  processRequest: async ({ filename, apiKey, extra }) => {
+  processRequest: async ({ token, filename, videoSize, apiKey, format }) => {
     try {
       console.log("🎯 Detalhes da requisição:", {
         filename,
+        videoSize,
         hasApiKey: !!apiKey,
-        extraKeys: extra ? Object.keys(extra) : [],
-        extraRaw: extra,
-      });
-
-      // Extração dos parâmetros necessários
-      const fileSize = parseInt(extra?.videoSize);
-      const cleanFilename = filename.split("/").pop().split("?")[0];
-      const targetFilename = extra?.filename || cleanFilename;
-
-      console.log("📊 Parâmetros processados:", {
-        targetFilename,
-        fileSize,
-        hasApiKey: !!apiKey,
-        originalFilename: filename,
+        format
       });
 
       // Validação dos parâmetros obrigatórios
-      if (!targetFilename || !apiKey || !fileSize) {
+      if (!filename || !apiKey || !videoSize) {
         console.log("⚠️ Parâmetros inválidos:", {
-          hasFilename: !!targetFilename,
+          hasFilename: !!filename,
+          hasVideoSize: !!videoSize,
           hasApiKey: !!apiKey,
-          hasFileSize: !!fileSize,
+          hasFormat: !!format
         });
         return { subtitles: [] };
       }
@@ -47,9 +38,9 @@ export const SubtitleHandler = {
       // Busca o arquivo no AllDebrid e obtém a URL de streaming
       console.log("🔍 Buscando stream URL...");
       const streamUrl = await MatcherService.findMedia(
-        targetFilename,
+        filename,
         apiKey,
-        fileSize
+        videoSize
       );
 
       if (!streamUrl) {
@@ -68,16 +59,13 @@ export const SubtitleHandler = {
       }
       console.log(`✅ Encontradas ${tracks.length} faixas`);
 
-      // Recupera o token da configuração, passado via extra (por exemplo, extra.token)
-      const token = extra.token || "";
-
       // Processa cada faixa de legenda encontrada
       const subtitles = tracks
         .filter((track) => track.codec_type === "subtitle")
         .map((track, index) => {
           const lang = track.tags?.language || "und";
-          // Usa o targetFilename como base para o ID da legenda
-          const subId = `${targetFilename}:${index}`;
+          // Usa o filename como base para o ID da legenda
+          const subId = `${filename}:${index}`;
 
           console.log(`📝 Processando legenda ${index}:`, {
             lang,
@@ -86,7 +74,7 @@ export const SubtitleHandler = {
           });
 
           // Armazena a legenda no cache para garantir sua disponibilidade
-          SubtitleService.cacheSubtitle(subId, {
+          SubtitleService.cacheSubtitle(subId, format, {
             streamUrl,
             trackIndex: track.index || index,
             language: lang,
@@ -95,9 +83,9 @@ export const SubtitleHandler = {
 
           // Constrói a URL de extração utilizando a rota customizada (/extract/:id)
           // O token é incorporado na URL para que o endpoint saiba qual configuração usar.
-          const subtitleUrl = `${SERVER_CONFIG.baseUrl}/${encodeURIComponent(
+          const subtitleUrl = `${SERVER_CONFIG.baseUrl}:${SERVER_CONFIG.port}/${encodeURIComponent(
             token
-          )}/extract/${subId}`;
+          )}/extract/${encodeURIComponent(subId)}`;
           console.log(`🔗 URL da legenda gerada: ${subtitleUrl}`);
 
           return {
@@ -137,9 +125,9 @@ export const SubtitleHandler = {
     }
     console.log("✅ Legenda encontrada no cache:", cached);
 
-    console.log("📝 Formato de saída:", CONFIG.subtitle.format);
+    console.log("📝 Formato de saída:", cached.format);
 
     // Converte a legenda para o formato configurado e retorna o stream
-    return SubtitleService.convertSubtitle(cached.streamUrl, cached.trackIndex);
+    return SubtitleService.convertSubtitle(cached.streamUrl, cached.trackIndex, cached.format);
   },
 };

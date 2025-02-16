@@ -71,7 +71,7 @@ export const CONFIG = {
     enabled: true
   },
   subtitle: {
-    format: 'vtt',
+    format: 'srt',
     preferredLanguages: ['eng', 'por'],
     convertToUtf8: true,
     cacheTimeout: 1800

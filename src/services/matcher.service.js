@@ -50,26 +50,25 @@ export const MatcherService = {
      * garantir que encontremos exatamente o arquivo sendo reproduzido
      * 
      * @param {Array} downloads - Lista de downloads do AllDebrid
-     * @param {string} filename - Nome do arquivo para referência
-     * @param {number} fileSize - Tamanho do arquivo em bytes
+     * @param {number} videoSize - Tamanho do arquivo em bytes
      * @returns {Object|null} Arquivo encontrado ou null
      */
-    findExactFile: (downloads, filename, fileSize) => {
+    findExactFile: (downloads, videoSize) => {
         // Validação dos parâmetros de entrada
         if (!downloads || !Array.isArray(downloads)) {
             console.warn('Lista de downloads inválida');
             return null;
         }
 
-        if (!fileSize || fileSize <= 0) {
-            console.warn('Tamanho de arquivo inválido:', fileSize);
+        if (!videoSize || videoSize <= 0) {
+            console.warn('Tamanho de arquivo inválido:', videoSize);
             return null;
         }
 
         // Define uma margem de erro de 1% para comparação de tamanhos
         // Isso é necessário pois diferentes sistemas podem reportar
         // tamanhos levemente diferentes para o mesmo arquivo
-        const sizeMargin = fileSize * 0.01;
+        const sizeMargin = videoSize * 0.01;
         
         // Procura em todos os downloads
         for (const download of downloads) {
@@ -81,14 +80,14 @@ export const MatcherService = {
             // Procura em todos os links do download
             for (const link of download.links) {
                 // Verifica se o tamanho do arquivo corresponde (com margem de erro)
-                const sizeDiff = Math.abs(link.size - fileSize);
+                const sizeDiff = Math.abs(link.size - videoSize);
                 
                 if (sizeDiff <= sizeMargin) {
                     // Encontrou o arquivo correto
                     console.log('Arquivo encontrado:', {
                         filename: link.filename,
                         size: link.size,
-                        expectedSize: fileSize,
+                        expectedSize: videoSize,
                         difference: sizeDiff
                     });
                     return link;
@@ -98,8 +97,7 @@ export const MatcherService = {
 
         // Arquivo não encontrado
         console.warn('Arquivo não encontrado com o tamanho especificado:', {
-            filename,
-            size: fileSize
+            size: videoSize
         });
         return null;
     },
@@ -134,18 +132,18 @@ export const MatcherService = {
      * Função principal que coordena a busca do arquivo específico
      * @param {string} filename - Nome do arquivo
      * @param {string} apiKey - Chave da API do AllDebrid
-     * @param {number} fileSize - Tamanho do arquivo em bytes
+     * @param {number} videoSize - Tamanho do arquivo em bytes
      * @returns {Promise<string>} URL de streaming do arquivo
      */
-    findMedia: async (filename, apiKey, fileSize) => {
+    findMedia: async (filename, apiKey, videoSize) => {
         try {
             // Validação dos parâmetros
-            if (!filename || !apiKey || !fileSize) {
+            if (!filename || !apiKey || !videoSize) {
                 throw new Error('Parâmetros inválidos para busca de mídia');
             }
 
             // Cria uma chave única para o cache que inclui o tamanho
-            const cacheKey = `${filename}-${fileSize}`;
+            const cacheKey = `${filename}-${videoSize}`;
             
             // Verifica primeiro no cache
             const cached = cache.get(cacheKey);
@@ -158,10 +156,10 @@ export const MatcherService = {
             const downloads = await MatcherService.fetchDownloads(apiKey);
             
             // Encontra o arquivo específico usando o tamanho como referência
-            const match = MatcherService.findExactFile(downloads, filename, fileSize);
+            const match = MatcherService.findExactFile(downloads, videoSize);
             
             if (!match) {
-                throw new Error(`Arquivo não encontrado: ${filename} (${fileSize} bytes)`);
+                throw new Error(`Arquivo não encontrado: ${filename} (${videoSize} bytes)`);
             }
 
             // Obtém URL de streaming
