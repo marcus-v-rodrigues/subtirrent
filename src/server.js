@@ -10,13 +10,7 @@ app.use(routes);
 
 // Inicializa o servidor
 const server = app.listen(SERVER_CONFIG.port, '0.0.0.0', () => {
-    const address = server.address();
-    console.log(`
-Addon iniciado em:
-- Local: http://localhost:${address.port}
-- Manifest: http://localhost:${address.port}/manifest.json
-- Instalação: stremio://localhost:${address.port}/manifest.json
-    `);
+    console.log(`Addon iniciado em: ${SERVER_CONFIG.baseUrl}:${SERVER_CONFIG.port}`);
 });
 
 // Tratamento de erros do servidor
