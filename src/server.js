@@ -10,7 +10,7 @@ app.use(routes);
 
 // Inicializa o servidor
 const server = app.listen(SERVER_CONFIG.port, '0.0.0.0', () => {
-    console.log(`Addon iniciado em: ${SERVER_CONFIG.baseUrl}:${SERVER_CONFIG.port}`);
+    console.log(`Addon iniciado em: ${SERVER_CONFIG.baseUrl}`);
 });
 
 // Tratamento de erros do servidor

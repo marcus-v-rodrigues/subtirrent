@@ -83,9 +83,7 @@ export const SubtitleHandler = {
 
           // Constrói a URL de extração utilizando a rota customizada (/extract/:id)
           // O token é incorporado na URL para que o endpoint saiba qual configuração usar.
-          const subtitleUrl = `${SERVER_CONFIG.baseUrl}:${SERVER_CONFIG.port}/${encodeURIComponent(
-            token
-          )}/extract/${encodeURIComponent(subId)}`;
+          const subtitleUrl = `${SERVER_CONFIG.baseUrl}/${encodeURIComponent(token)}/extract/${encodeURIComponent(subId)}`;
           console.log(`🔗 URL da legenda gerada: ${subtitleUrl}`);
 
           return {

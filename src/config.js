@@ -19,10 +19,15 @@ export const CACHE_CONFIG = {
 export const subtitleCache = new LRUCache(CACHE_CONFIG);
 
 // Configurações do servidor
-export const SERVER_CONFIG = {
-  port: process.env.PORT || 7000,
-  baseUrl: process.env.BASE_URL || 'http://localhost:7000'
-};
+const port = process.env.PORT || 7000;
+let baseUrl = process.env.BASE_URL || "http://localhost";
+
+// Se a URL de ambiente for "localhost" e não incluir a porta, anexa-a.
+if (baseUrl.includes("localhost") && !baseUrl.includes(`:${port}`)) {
+  baseUrl = `${baseUrl}:${port}`;
+}
+
+export const SERVER_CONFIG = { port, baseUrl };
 
 /**
  * Manifest do addon.
