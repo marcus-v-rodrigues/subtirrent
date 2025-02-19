@@ -45,62 +45,71 @@ export const MatcherService = {
     },
 
     /**
-     * Encontra um arquivo específico nos downloads baseado no tamanho
-     * Usa o tamanho do arquivo como principal critério de busca para
-     * garantir que encontremos exatamente o arquivo sendo reproduzido
+     * Encontra um arquivo específico nos downloads baseado no tamanho e na proximidade do horário de conclusão.
+     * Usa o tamanho do arquivo como principal critério e, dentre os que atenderem, seleciona aquele cuja
+     * propriedade completionDate (convertida para milissegundos) esteja mais próxima do horário atual da requisição.
      * 
      * @param {Array} downloads - Lista de downloads do AllDebrid
      * @param {number} videoSize - Tamanho do arquivo em bytes
      * @returns {Object|null} Arquivo encontrado ou null
      */
     findExactFile: (downloads, videoSize) => {
-        // Validação dos parâmetros de entrada
         if (!downloads || !Array.isArray(downloads)) {
             console.warn('Lista de downloads inválida');
             return null;
         }
-
         if (!videoSize || videoSize <= 0) {
             console.warn('Tamanho de arquivo inválido:', videoSize);
             return null;
         }
 
         // Define uma margem de erro de 1% para comparação de tamanhos
-        // Isso é necessário pois diferentes sistemas podem reportar
-        // tamanhos levemente diferentes para o mesmo arquivo
         const sizeMargin = videoSize * 0.01;
-        
-        // Procura em todos os downloads
+        const now = Date.now();
+        let bestMatch = null;
+        let bestTimeDiff = Infinity;
+
         for (const download of downloads) {
-            // Pula downloads que não estão prontos ou não têm links
+            // Considera apenas downloads prontos e com links disponíveis
             if (download.status !== 'Ready' || !download.links) {
                 continue;
             }
+            
+            // Usa completionDate para comparação, convertendo de segundos para milissegundos
+            const completionTimestamp = download.completionDate && download.completionDate > 0 
+                ? download.completionDate * 1000 
+                : now; // Se não houver completionDate, utiliza o horário atual
+            const timeDiff = Math.abs(now - completionTimestamp);
 
-            // Procura em todos os links do download
             for (const link of download.links) {
-                // Verifica se o tamanho do arquivo corresponde (com margem de erro)
+                // Verifica se o tamanho do arquivo corresponde (dentro da margem de erro)
                 const sizeDiff = Math.abs(link.size - videoSize);
-                
                 if (sizeDiff <= sizeMargin) {
-                    // Encontrou o arquivo correto
-                    console.log('Arquivo encontrado:', {
-                        filename: link.filename,
-                        size: link.size,
-                        expectedSize: videoSize,
-                        difference: sizeDiff
-                    });
-                    return link;
+                    // Seleciona o link com a menor diferença de horário
+                    if (timeDiff < bestTimeDiff) {
+                        bestTimeDiff = timeDiff;
+                        bestMatch = link;
+                        console.log('Arquivo potencial encontrado:', {
+                            filename: link.filename,
+                            size: link.size,
+                            expectedSize: videoSize,
+                            sizeDifference: sizeDiff,
+                            timeDifference: timeDiff,
+                            completionTimestamp: completionTimestamp
+                        });
+                    }
                 }
             }
         }
 
-        // Arquivo não encontrado
-        console.warn('Arquivo não encontrado com o tamanho especificado:', {
-            size: videoSize
-        });
-        return null;
+        if (bestMatch) {
+            console.log('Arquivo selecionado:', bestMatch);
+        } else {
+            console.warn('Arquivo não encontrado com o tamanho especificado:', { size: videoSize });
+        }
+        return bestMatch;
     },
+
 
     /**
      * Obtém o link de streaming direto para um arquivo
