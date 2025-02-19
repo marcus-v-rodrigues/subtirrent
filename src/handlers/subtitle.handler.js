@@ -1,21 +1,20 @@
-import { MatcherService } from "../services/matcher.service.js";
+import { SearchService } from "../services/search.service.js";
 import { SubtitleService } from "../services/subtitle.service.js";
-import { SERVER_CONFIG, CONFIG } from "../config.js";
+import { KitsuService } from "../services/kitsu.service.js";
+import { SERVER_CONFIG } from "../config.js";
 
 export const SubtitleHandler = {
   /**
-   * Processa uma requisição de legendas do Stremio
-   * Esta função é chamada quando o Stremio solicita legendas para um vídeo
-   *
-   * @param {Object} params - Parâmetros da requisição
-   * @param {string} params.token - String (em base64) com os dados de configuração do usuário
-   * @param {string} params.filename - Nome do arquivo ou ID do conteúdo no OpenSubtitles (ex: 1234567:1:1)
-   * @param {Object} params.videoSize - Tamanho do vídeo
-   * @param {string} params.apiKey - Chave da API do AllDebrid
-   * @param {string} params.format - Formato escolhido para a legenda
-   * @returns {Promise<Object>} - Lista de legendas disponíveis
+   * Processa uma requisição de legendas do Stremio.
+   * @param {Object} params - Parâmetros da requisição.
+   * @param {string} params.token - String (em base64) com os dados de configuração do usuário.
+   * @param {string} params.filename - Nome do arquivo ou ID do conteúdo (ex: "1234567:1:1" ou "kitsu:12345:...").
+   * @param {number} params.videoSize - Tamanho do vídeo (em bytes).
+   * @param {string} params.apiKey - Chave da API do AllDebrid.
+   * @param {string} params.format - Formato escolhido para a legenda.
+   * @returns {Promise<Object>} - Objeto com a lista de legendas disponíveis.
    */
-  processRequest: async ({ token, filename, videoSize, apiKey, format }) => {
+  async processRequest({ token, filename, videoSize, apiKey, format }) {
     try {
       console.log("🎯 Detalhes da requisição:", {
         filename,
@@ -23,79 +22,74 @@ export const SubtitleHandler = {
         hasApiKey: !!apiKey,
         format
       });
-
-      // Validação dos parâmetros obrigatórios
       if (!filename || !apiKey || !videoSize) {
-        console.log("⚠️ Parâmetros inválidos:", {
-          hasFilename: !!filename,
-          hasVideoSize: !!videoSize,
-          hasApiKey: !!apiKey,
-          hasFormat: !!format
-        });
+        console.log("⚠️ Parâmetros inválidos");
         return { subtitles: [] };
       }
+      // Decodifica a configuração do usuário
+      const userConfig = JSON.parse(Buffer.from(token, 'base64').toString('utf8'));
 
-      // Busca o arquivo no AllDebrid e obtém a URL de streaming
-      console.log("🔍 Buscando stream URL...");
-      const streamUrl = await MatcherService.findMedia(
-        filename,
-        apiKey,
-        videoSize
-      );
+      // Define o termo de busca. Se o suporte a Kitsu estiver habilitado, obtém o título via Kitsu.
+      let searchQuery = filename;
+      if (
+        userConfig.subtitle &&
+        userConfig.subtitle.kitsu &&
+        userConfig.subtitle.kitsu.enabled
+      ) {
+        const parts = filename.split(':');
+        const kitsuId = (parts[0].toLowerCase() === 'kitsu' && parts[1]) ? parts[1] : filename;
+        try {
+          const kitsuTitle = await KitsuService.getAnimeTitle(kitsuId);
+          console.log("Título obtido do Kitsu:", kitsuTitle);
+          searchQuery = kitsuTitle;
+        } catch (error) {
+          console.warn("Falha ao obter título do Kitsu; usando o filename como query");
+        }
+      }
 
+      // Busca a URL de streaming usando o SearchService (Torrentio + AllDebrid)
+      console.log("🔍 Buscando stream URL via SearchService...");
+      const streamUrl = await SearchService.getStreamUrl(searchQuery, videoSize, apiKey);
       if (!streamUrl) {
-        console.log("❌ Stream URL não encontrada");
         throw new Error("URL de streaming não encontrada");
       }
-      console.log("✅ Stream URL encontrada");
+      console.log("✅ Stream URL obtida:", streamUrl);
 
-      // Analisa o arquivo em busca de faixas de legenda
+      // Prova o stream usando FFmpeg para extrair as faixas de legenda
       console.log("🔍 Buscando faixas de legenda...");
       const tracks = await SubtitleService.probeSubtitles(streamUrl);
-
       if (!tracks || !Array.isArray(tracks)) {
-        console.log("❌ Nenhuma faixa de legenda encontrada");
         throw new Error("Nenhuma faixa de legenda encontrada");
       }
       console.log(`✅ Encontradas ${tracks.length} faixas`);
 
-      // Processa cada faixa de legenda encontrada
       const subtitles = tracks
         .filter((track) => track.codec_type === "subtitle")
         .map((track, index) => {
           const lang = track.tags?.language || "und";
-          // Usa o filename como base para o ID da legenda
           const subId = `${filename}:${index}`;
-
           console.log(`📝 Processando legenda ${index}:`, {
             lang,
             codec: track.codec_name,
             tags: track.tags,
           });
-
-          // Armazena a legenda no cache para garantir sua disponibilidade
+          // Armazena a legenda no cache
           SubtitleService.cacheSubtitle(subId, format, {
             streamUrl,
             trackIndex: track.index || index,
             language: lang,
             codec: track.codec_name,
           });
-
-          // Constrói a URL de extração utilizando a rota customizada (/extract/:id)
-          // O token é incorporado na URL para que o endpoint saiba qual configuração usar.
+          // Gera a URL para extração da legenda, incorporando o token de configuração
           const subtitleUrl = `${SERVER_CONFIG.baseUrl}/${encodeURIComponent(token)}/extract/${encodeURIComponent(subId)}`;
           console.log(`🔗 URL da legenda gerada: ${subtitleUrl}`);
-
           return {
             id: subId,
             url: subtitleUrl,
             lang: SubtitleService.validateLanguageCode(lang),
-            name: `${SubtitleService.getLanguageName(lang)} - ${
-              track.tags?.title || "Track " + index
-            }`,
+            name: `${SubtitleService.getLanguageName(lang)} - ${track.tags?.title || "Track " + index}`,
           };
         });
-
       console.log(`✅ Processadas ${subtitles.length} legendas`);
       return { subtitles };
     } catch (error) {
@@ -112,20 +106,15 @@ export const SubtitleHandler = {
    * @param {string} subId - ID único da legenda (formato: filename:index)
    * @returns {Promise<Stream>} - Stream da legenda no formato configurado
    */
-  extractSubtitle: async (subId) => {
+  async extractSubtitle(subId) {
     console.log("🎯 Extraindo legenda:", subId);
-
-    // Busca informações da legenda no cache
     const cached = SubtitleService.getCachedSubtitle(subId);
     if (!cached) {
       console.log("❌ Legenda não encontrada no cache");
       throw new Error("Informações da legenda não encontradas no cache");
     }
     console.log("✅ Legenda encontrada no cache:", cached);
-
     console.log("📝 Formato de saída:", cached.format);
-
-    // Converte a legenda para o formato configurado e retorna o stream
     return SubtitleService.convertSubtitle(cached.streamUrl, cached.trackIndex, cached.format);
   },
 };

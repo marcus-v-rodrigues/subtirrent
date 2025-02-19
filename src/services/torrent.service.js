@@ -1,11 +1,11 @@
 import WebTorrent from 'webtorrent';
-import { SERVER_CONFIG } from './config.js';
+import { SERVER_CONFIG } from '../config.js';
 
 const client = new WebTorrent({
   tracker: { wrtc: false },
   dht: false,
   webSeeds: false,
-  port: SERVER_CONFIG.torrentPorts.start
+  port: SERVER_CONFIG.torrentPort
 });
 
 export const TorrentService = {

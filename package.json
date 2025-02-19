@@ -15,7 +15,8 @@
     "iso-639-1": "^2.1.15",
     "lru-cache": "^10.0.0",
     "node-fetch": "^3.3.0",
-    "stremio-addon-sdk": "^1.6.10"
+    "stremio-addon-sdk": "^1.6.10",
+    "webtorrent": "^2.5.19"
   },
   "devDependencies": {
     "eslint": "^8.40.0",
