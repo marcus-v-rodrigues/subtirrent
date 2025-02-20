@@ -59,16 +59,28 @@ export const SubtitleHandler = {
       }
       console.log(`✅ Encontradas ${tracks.length} faixas`);
 
-      // Processa cada faixa de legenda encontrada
+      // Obtém a lista de idiomas preferidos convertendo-os para o mesmo formato usado pela validação
+      const preferredLanguages = CONFIG.subtitle.preferredLanguages.map(lang =>
+        SubtitleService.validateLanguageCode(lang)
+      );
+
+      console.log("preferredLanguages: ", preferredLanguages);
+
       const subtitles = tracks
         .filter((track) => track.codec_type === "subtitle")
+        .filter((track) => {
+          const lang = track.tags?.language || "und";
+          const validatedLang = SubtitleService.validateLanguageCode(lang);
+          return preferredLanguages.includes(validatedLang);
+        })
         .map((track, index) => {
           const lang = track.tags?.language || "und";
+          const validatedLang = SubtitleService.validateLanguageCode(lang);
           // Usa o filename como base para o ID da legenda
           const subId = `${filename}:${index}`;
 
           console.log(`📝 Processando legenda ${index}:`, {
-            lang,
+            lang: validatedLang,
             codec: track.codec_name,
             tags: track.tags,
           });
@@ -77,7 +89,7 @@ export const SubtitleHandler = {
           SubtitleService.cacheSubtitle(subId, format, {
             streamUrl,
             trackIndex: track.index || index,
-            language: lang,
+            language: validatedLang,
             codec: track.codec_name,
           });
 
@@ -89,10 +101,8 @@ export const SubtitleHandler = {
           return {
             id: subId,
             url: subtitleUrl,
-            lang: SubtitleService.validateLanguageCode(lang),
-            name: `${SubtitleService.getLanguageName(lang)} - ${
-              track.tags?.title || "Track " + index
-            }`,
+            lang: validatedLang,
+            name: `${SubtitleService.getLanguageName(validatedLang)} - ${track.tags?.title || "Track " + index}`,
           };
         });
 
